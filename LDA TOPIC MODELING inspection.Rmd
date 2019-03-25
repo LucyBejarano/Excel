@@ -1,0 +1,325 @@
+---
+title: "LDA Topic Modeling"
+output:
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#LDA TOPIC MODELING
+##LOAD THE LIBRARIES
+```{r}
+library(tidytext) #text mining, unnesting
+library(topicmodels) #the LDA algorithm
+library(tidyr) #gather()
+library(dplyr) #awesome tools
+library(ggplot2) #visualization
+library(kableExtra) #create attractive tables
+library(knitr) #simple table generator
+library(ggrepel) #text and label geoms for ggplot2
+library(gridExtra)
+library(formattable) #color tile and color bar in `kables`
+library(tm) #text mining
+library(circlize) #already loaded, but just being comprehensive
+library(plotly) #interactive ggplot graphs
+library(readr)
+library(readxl)
+```
+##FORMATTING
+```{r}
+#define some colors to use throughout
+my_colors <- c("#E69F00", "#56B4E9", "#009E73", "#CC79A7", "#D55E00", "#D65E00")
+
+#customize ggplot2's default theme settings
+#this tutorial doesn't actually pass any parameters, but you may use it again in future tutorials so it's nice to have the options
+theme_lyrics <- function(aticks = element_blank(),
+                         pgminor = element_blank(),
+                         lt = element_blank(),
+                         lp = "none")
+{
+  theme(plot.title = element_text(hjust = 0.5), #center the title
+        axis.ticks = aticks, #set axis ticks to on or off
+        panel.grid.minor = pgminor, #turn on or off the minor grid lines
+        legend.title = lt, #turn on or off the legend title
+        legend.position = lp) #turn on or off the legend
+}
+
+#customize the text tables for consistency using HTML formatting
+my_kable_styling <- function(dat, caption) {
+  kable(dat, "html", escape = FALSE, caption = caption) %>%
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered"),
+                full_width = FALSE)
+}
+
+word_chart <- function(data, input, title) {
+  data %>%
+  #set y = 1 to just plot one variable and use word as the label
+  ggplot(aes(as.factor(row), 1, label = input, fill = factor(topic) )) +
+  #you want the words, not the points
+  geom_point(color = "transparent") +
+  #make sure the labels don't overlap
+  geom_label_repel(nudge_x = .2,  
+                   direction = "y",
+                   box.padding = 0.1,
+                   segment.color = "transparent",
+                   size = 3) +
+  facet_grid(~topic) +
+  theme_lyrics() +
+  theme(axis.text.y = element_blank(), axis.text.x = element_blank(),
+        #axis.title.x = element_text(size = 9),
+        panel.grid = element_blank(), panel.background = element_blank(),
+        panel.border = element_rect("lightgray", fill = NA),
+        strip.text.x = element_text(size = 9)) +
+  labs(x = NULL, y = NULL, title = title) +
+    #xlab(NULL) + ylab(NULL) +
+  #ggtitle(title) +
+  coord_flip()
+}
+```
+#UPLOAD DATASETS
+```{r}
+setwd("C:/Users/Lucy Bejarano/Desktop/UNIL/Subjets/1-2019/Project/Data base")
+data <- read_xlsx("Compilation_FAO_unil.xlsx") 
+data_needed<-data[,c(2,8,12,13,14,15)] #CREATE DATASET CONTAINING ONLY THINGS WE NEED
+
+colnames(data_needed)[1]<-"document" #change name of columns
+data_needed$document<-as.character(as.numeric(data_needed$document)) #transform column in character instead of num.
+data_needed<-data_needed%>% 
+  drop_na() #take out NA
+```
+#TEXT CLEANING AND SEPARATING WORDS
+###We included separate alpha numeric words and steaming
+```{r}
+new_stopwords = c(stopwords(kind = "fr"), "d'un", "d'une", "deux")
+
+#Clean Work Decription column
+clean_work_description<-removeWords(data_needed$work_description, new_stopwords)
+clean_work_description=gsub("([0-9])([a-zA-Z])","\\1 \\2",clean_work_description)
+clean_work_description=gsub("([a-zA-Z])([0-9])","\\1 \\2",clean_work_description)
+clean_work_description=stemDocument(clean_work_description, language = "french")
+clean_work_description<-removeNumbers(clean_work_description)
+clean_work_description<- iconv(clean_work_description, from = "UTF-8", to = "ASCII//TRANSLIT")
+clean_work_description<- gsub('[[:punct:]]+','',clean_work_description)
+
+#Replace old Work Decription column with new clean one
+data_needed$work_description<-clean_work_description
+
+#Create tokenized dataframe
+separated_tidy_data=data_needed%>%
+  unnest_tokens(word,work_description)
+```
+
+```{r}
+separated_tidy_data %>%
+  group_by(interesting) %>%
+  mutate(word_count = n()) %>%
+  select(interesting, word_count) %>% #only need these fields
+  distinct() %>%
+  ungroup() %>%
+  #assign color bar for word_count that varies according to size
+  #create static color for source and genre
+  mutate(word_count = color_bar("lightpink")(word_count),  
+         interesting = color_tile("lightblue","lightblue")(interesting)) %>%
+  my_kable_styling("Stats")
+```
+Not balanced, but tidy.
+
+###CREATE DOCUMENT TERM MATRIX
+We can now create a document-term matrix (DTM) in which each document is a row, and each column is a term. This format is required for the LDA algorithm. A document refers to a song in the lyrics and a page number in the books.
+```{r}
+dtm<- separated_tidy_data %>%
+  #get word count per document to pass to cast_dtm
+  count(document, word, sort = TRUE) %>%
+  ungroup() %>%
+  #create a DTM with docs as rows and words as columns
+  cast_dtm(document, word, n)
+
+#examine the structure of the DTM
+dtm
+df <- t(sapply(dtm,
+                function(x,m) c(x,rep(NA,m-length(x))),
+                max(rapply(dtm,length))))
+
+df2=as.data.frame(df)
+
+```
+This tells you how many documents and terms you have and that this is a very sparse matrix. The word sparse implies that the DTM contains mostly empty fields. Because of the vast vocabulary of possible terms from all documents, only a few will be used in each individual document.
+
+```{r}
+#look at 4 documents and 8 words of the DTM
+inspect(dtm[1:5,5:15])
+```
+We can see that each row is a document and each column is a term
+
+###SET VARIABLES
+Now that you know what is needed as input to build your model, set two variables that you can simply reset when constructing each model. You'll call these source_dtm and source_tidy.
+```{r}
+#assign the source dataset to generic var names
+#so we can use a generic function per model
+source_dtm <- dtm
+source_tidy <-separated_tidy_data
+```
+###FIT THE MODEL
+```{r}
+k <- 2 #number of topics
+seed = 1234 #necessary for reproducibility
+lda <- LDA(source_dtm, k = k, method = "GIBBS", control = list(seed = seed))
+```
+Now we want to convert the LDA object into a tidy format.
+```{r}
+tidy(lda, matrix = "beta") %>% filter(term == "construction")
+
+#passing "beta" shows the per-topic-per-word probabilities from the model
+#filter on the word iceberg as an example
+#results show probability of iceberg for each topic
+```
+To understand the model clearly, you need to see what terms are in each topic. 
+Build a function that will tidy the LDA model, and extract the top terms for each topic. 
+In other words, the terms per topic with the largest beta values.
+
+```{r}
+num_words <- 10 #number of words to visualize
+
+#create function that accepts the lda model and num word to display
+top_terms_per_topic <- function(lda_model, num_words) {
+
+  #tidy LDA object to get word, topic, and probability (beta)
+  topics_tidy <- tidy(lda_model, matrix = "beta")
+
+
+  top_terms <- topics_tidy %>%
+  group_by(topic) %>%
+  arrange(topic, desc(beta)) %>%
+  #get the top num_words PER topic
+  slice(seq_len(num_words)) %>%
+  arrange(topic, beta) %>%
+  #row is required for the word_chart() function
+  mutate(row = row_number()) %>%
+  ungroup() %>%
+  #add the word Topic to the topic labels
+  mutate(topic = paste("Topic", topic, sep = " "))
+  #create a title to pass to word_chart
+  title <- paste("LDA Top Terms for", k, "Topics")
+  #call the word_chart function you built in prep work
+  word_chart(top_terms, top_terms$term, title)
+}
+#call the function you just built!
+top_terms_per_topic(lda, num_words)
+```
+##CLASSIFY DOCUMENTS
+```{r}
+#this time use gamma to look at the prob a doc is in a topic
+#just look at the Prince song 1999 as an example
+tidy(lda, matrix = "gamma") %>% filter(document == "48951") #HIGHER GAMMA FOR TOPIC 1 (INTERESTING)
+```
+```{r}
+tidy(lda, matrix = "gamma") %>% filter(document == "160053") #HIGHER GAMMA FOR TOPIC 2 (NOT INTERESTING)
+tidy(lda, matrix = "gamma") %>% filter(document == "21153") #HIGHER GAMMA FOR TOPIC 2 (NOT INTERESTING)
+```
+##CHORD DIAGRAM
+###install.packages("circlize")
+```{r}
+#using tidy with gamma gets document probabilities into topic
+#but you only have document, topic and gamma
+source_topic_relationship <- tidy(lda, matrix = "gamma") %>%
+  #join to orig tidy data by doc to get the source field
+  inner_join(separated_tidy_data, by = "document") %>%
+  select(interesting, topic, gamma) %>%
+  group_by(interesting, topic) %>%
+  #get the avg doc gamma value per source/topic
+  mutate(mean = mean(gamma)) %>%
+  #remove the gamma value as you only need the mean
+  select(-gamma) %>%
+  #removing gamma created duplicates so remove them
+  distinct()
+
+#relabel topics to include the word Topic
+source_topic_relationship$topic = paste("Topic", source_topic_relationship$topic, sep = " ")
+
+circos.clear() #very important! Reset the circular layout parameters
+#assign colors to the outside bars around the circle
+grid.col = c("0" = my_colors[1],
+             "1" = my_colors[2],
+             "Topic 1" = "grey", "Topic 2" = "grey")
+
+# set the global parameters for the circular layout. Specifically the gap size (15)
+#this also determines that topic goes on top half and source on bottom half
+circos.par(gap.after = c(rep(5, length(unique(source_topic_relationship[[1]])) - 1), 15,
+                         rep(5, length(unique(source_topic_relationship[[2]])) - 1), 15))
+#main function that draws the diagram. transparancy goes from 0-1
+chordDiagram(source_topic_relationship, grid.col = grid.col, transparency = .2)
+title("Relationship Between Topic and Source")
+```
+
+##Quanteda
+```{r}
+
+df_corpus<-corpus(data_needed,text_field ="work_description")
+
+```
+
+##Naive bayes library
+```{r}
+dtm=dfm(df_corpus)
+summary(df_corpus)
+dtm
+docvars(dtm,"0")=docvars(dtm,"interesting")==0
+
+
+## sample 40 documents for the training set and use remaining (18) for testing 
+train_dtm <- dfm_sample(dtm, size = 700)
+test_dfm <- dtm[setdiff(docnames(dtm), docnames(train_dtm)), ]
+
+## fit a Naive Bayes muitinomial model and use it to predict the test_data_
+nb_model <- textmodel_nb(train_dtm, y = docvars(train_dtm, "0")) 
+
+pred_nb <- predict(nb_model, newdata = test_dfm)
+
+  
+dfm=dfm(dtm)
+
+
+inaugCorpus <- read_csv("C:/Users/Lucy Bejarano/Desktop/UNIL/Subjets/1-2019/Project/Text analysis/inaugCorpus.csv")
+doc_freq=docfreq(dtm)
+
+dtm=dtm[doc_freq>=1096]
+
+```
+
+```{r}
+summary(data_corpus_inaugural)
+y=as.data.frame(data_corpus_inaugural)
+head(docvars(data_corpus_inaugural), 10)
+fulltext=corpus(data_corpus_inaugural,text_field ="texts")
+dtm2=dfm(fulltext)
+summary(dtm2)
+head(dtm2)
+
+docvars(dtm2,"is_prewar")=docvars(dtm2,"Year")<1945
+train_dtm2 <- dfm_sample(dtm2, size = 40)
+test_dtm2 <- dtm2[setdiff(docnames(dtm2), docnames(train_dtm2)), ]
+
+
+## fit a Naive Bayes muitinomial model and use it to predict the test_data_
+nb_model2 <- textmodel_nb(train_dtm2, y = docvars(train_dtm2, "is_prewar")) 
+pred_nb2=predict(nb_model2, newdata = test_dtm2)
+x2=as.data.frame(pred_nb2)
+table(x2$pred_nb2,is_prewar=docvars(test_dtm2,"is_prewar"))
+```
+
+
+
+
+```{r}
+library(rvest)
+library(stringr)
+library(tidyr)
+library(methods)
+
+url <- "http://www.bartleby.com/124/"
+site <- read_html(url)
+```
+
