@@ -1,0 +1,147 @@
+---
+title: "hw1_ex1.Rmd"
+author: "Ana Lucy Bejarano Montalvo"
+date: "April 12, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+```
+
+
+```{r}
+Exercise 2: Edgar Anderson's Iris Data
+In this exercise, you will analyze a well-known iris dataset, which you studied in Machine Learning In Business Analytics course. The dataset contains measurements in centimeters of the variables sepal length and width and petal length and width, respectively for each type of iris, namely, setosa, versicolor, and virginica.
+```
+
+the pipeline symbol %>%,
+dplyr verbs (see below),
+kable to print tables,
+ggplot to produce the figures.
+verb	description	
+select()	select columns	
+filter()	filter rows	
+arrange()	re-order or arrange rows	
+mutate()	create new columns	
+summarise()	summarise values	
+group_by()	group operations
+
+
+
+
+Packages
+
+```{r}
+install.packages(dplyr)
+install.packages(kableExtra)
+install.packages(ggplot2)
+x=is.na(iris)
+summary(x)
+
+```
+
+```{r}
+library(dplyr)
+library(kableExtra)
+library(ggplot2)
+library(datasets)
+library("tibble")
+```
+
+
+2.a Load the dataset iris and convert it into tibble. How many columns does the dataset have? Name data types of these columns.
+It has 5 columns compose by 4 numerical variables and 1 factor that specify each observation into a specie. 
+
+```{r}
+data=as.data.frame(iris)
+class(data)
+data=as_tibble(iris)
+class(data)
+head(data)
+class(data)
+summary(data)
+
+```
+
+2.b Print out only species and its length of a sepal in ascending order. Print out same columns in using descending order of sepal length.
+
+```{r}
+data %>% 
+  select(Species,Sepal.Length) %>%
+  arrange(Sepal.Length)
+
+```
+
+```{r}
+data %>% select(Species,Sepal.Length) %>% arrange(desc(Sepal.Length))
+```
+
+
+2.c Create a new object iris_species and assign to it the iris tibble grouped by the type of Species. How many entries does each Species have?
+
+
+```{r}
+iris_species<- data %>% 
+  group_by(Species)
+
+iris_species  %>%
+  summarise(n=n())
+
+summary(iris_species)
+class(iris_species)
+```
+
+2.d Print out the average sepal's and petal's length and width for each species. What can be noticed?
+
+```{r}
+iris_species %>%
+  summarise(meanSL=mean(Sepal.Length,na.rm = TRUE), meanSW=mean(Sepal.Width,na.rm = TRUE), meanPL=mean(Petal.Length,na.rm=TRUE), meanPW=mean(Petal.Width,na.rm = TRUE))
+
+```
+
+flights %>% group_by(year, month, day) %>% select(arr_delay, dep_delay) %>% 
+  summarize(arr = mean(arr_delay, na.rm = TRUE), dep = mean(dep_delay, na.rm = TRUE)) %>% filter(arr > 30 | dep > 30)
+
+
+2.e Modify iris_species by adding a new column of standardized petal's length (i.e., you need to subtract a mean value from each observation and divide by standard deviation). Print the maximum values of this new variable for each species.
+```{r}
+iris_species%>%
+  mutate(stand_SL=(Petal.Length-mean(Petal.Length))/sd(Petal.Length))%>%
+  summarize(max(stand_SL))
+
+
+iris_species<--iris_species%>%
+  mutate(stand_SL=(Petal.Length-mean(Petal.Length))/sd(Petal.Length))
+iris_species%>%
+  summarize(max(stand_SL))  
+```
+
+
+2.f Using the original iris tibble visualize the relation between petal's length and petal's width by plotting a scatter chart. Bonus: display a (linear) regression line without confidence intervals.
+
+```{r}
+ggplot(data = iris,mapping = aes(x = Petal.Length, y = Petal.Width)) +
+  geom_point()+
+  geom_smooth(method = lm ,se = FALSE)
+
+```
+
+
+2.g Modify previous plot by using different colors for each species only for the scatter chart and not for the regression line.
+
+```{r}
+ggplot(data = iris,mapping = aes(x = Petal.Length, y =Petal.Width))+
+  geom_point(mapping = aes(color=Species))+
+  geom_smooth(method = lm ,se = FALSE)
+                                                                                
+```
+
+
+
+
+
