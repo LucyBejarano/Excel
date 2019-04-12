@@ -1,0 +1,92 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#Homework 1 - Report
+Alfieri Anna and Bejarano Montalvo Ana Lucy
+11 april, 2019
+
+##Ex. 0
+As a starting point you can install the packages we’ll extensively use throughout the semester:
+* readr
+* tidyverse
+
+```{r}
+install.packages("readr")
+install.packages("tidyverse")
+library(readr)
+library(tidyverse)
+```
+
+##Exercise 1
+Try to figure out the answers without executing the code. Check your answers in R Studio.
+
+a. Given the vector: x <- c("ww", "ee", "ff", "uu", "kk"), what will be the output for x[c(2,3)] ?
+
+The code x[c(2,3)] should give as an output the values of the vector x for the second and third row, namely "ee" and "ff". The following code also confirms that.
+```{r}
+x <- c("ww", "ee", "ff", "uu", "kk")
+x[c(2,3)]
+```
+
+b. Let a <- c(2, 4, 6, 8) and b <- c(TRUE, FALSE, TRUE, FALSE), what will be the output for the R expression max(a[b])?
+
+The code max(a[b]) looks for the maximum values of a given b. This means that it will search for the highest value in vector a that corresponds to true in vector b. The result should be 6. We applied the following code to check our assumption.
+```{r}
+a <- c(2, 4, 6, 8)
+b <- c(TRUE, FALSE, TRUE, FALSE)
+max(a[b])
+```
+
+
+c. Is it possible to apply the function my_function_name using x and a as arguments?
+
+
+
+##Exercise 2
+Consider a vector x such that: x=c(1, 3, 4, 7, 11, 18, 29) Write an R statement that will return a list X2 with components of value: x*2, x/2, sqrt(x) and names ‘x*2’, ‘x/2’, ‘sqrt(x)’.
+```{r}
+x<-c(1, 3, 4, 7, 11, 18, 29)
+X2<-list("x*2"=x*2,"x/2"=x/2, "sqrt(x)"=sqrt(x))
+X2
+```
+
+##Exercise 3
+Read the file Table0.txt into an object DS.
+```{r}
+Table0 <- read_table2("Table0.txt",col_names =FALSE, 
+                      cols(X1 = col_character(),X2 = col_double(), X3 = col_double(), X4 = col_double(),
+                           X5 = col_character())
+)
+View(Table0)
+```
+1. What is the data type for the object DS?
+It's a table.
+
+2. Change the names of the columns to Name, Age, Height, Weight and Sex.
+```{r}
+Table0<-setNames(Table0, c("Name", "Age", "Height", "Weight", "Sex"))
+```
+
+3. Change the row names so that they are the same as Name, and remove the variable Name.
+```{r}
+
+```
+
+4. Get the number of rows and columns of the data.
+
+##Exercise 4
+Convert DS from the previous exercise to a data frame DF.
+```{r}
+Table0<-as.data.frame(Table0)
+```
+Add an additional column “zeros” in DF with all elements 0.
+```{r}
+
+```
+
+Remove the Weight comuln from DF.
