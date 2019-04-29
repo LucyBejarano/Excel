@@ -1,0 +1,421 @@
+---
+title: "Homework 3 - Report"
+author: "Name I, First Name I and Name II, First Name II"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+## Basic instructions
+
+To obtain the maximum number of points, use whenever possible:
+
+* the pipeline symbol %>%,
+* `dplyr` verbs,
+* `kable` to print tables,
+* `ggplot` to produce the figures,
+* `purr`'s functions to minimize code duplication,
+* `broom`'s functions to format the results model fits.
+
+Also: 
+
+* Pay attention to the general aesthetics of your report (i.e., formatting of 
+the tables, sizing of the figures, etc.). 
+* Use inline code to display single numbers, and `echo = FALSE` for code chunks when you display 
+a table of produce a figure (i.e., we don't want to see code unless it is necessary).
+* Minimize the amount of code duplication by using iterations concepts and list-columns.
+* Comment your code to explain what you are doing.
+
+<!-- The following code chunk loads the packages and dataset that you will need for this assignment: -->
+
+```{r setup, echo = FALSE, warning = FALSE, message = FALSE}
+library(knitr)
+library(tidyverse)
+library(lubridate)
+library(modelr)
+library(broom)
+library(ggrepel)
+temperature_data <- read_csv("../data/temperature_data.csv")
+```
+
+<!-- The following code chunk sets a few option for nice visualization: -->
+
+```{r setup2, echo = FALSE, warning = FALSE, message = FALSE}
+theme_set(theme_light())
+opts_chunk$set(fig.width = 8, 
+               fig.asp = 0.618, 
+               out.width = "70%",
+               fig.align = "center",
+               fig.show = "hold",
+               message = FALSE) 
+```
+
+## The data
+
+For this assignment, you will use temperature data provided by [Berekeley Earth](http://berkeleyearth.org/data/).
+More specifically, you will use time series of average monthly air temperatures over land in every country between 1743 and today.
+The dataset contains `r nrow(temperature_data)` observations and `r ncol(temperature_data)` variables (`r names(temperature_data)`).
+
+## A note on time series
+
+A time series is a series of data points indexed by (a specific) time. 
+For example, monthly time series are series with monthly data points. Such series can (often) be decomposed into three main components: a trend, which reflects the long-term behaviour of the series (e.g. a series has an upward trend if its values increase over time); a seasonal pattern, when some specific behaviour appear every x days/months/years (e.g. for sales data over time, you might have a seasonal pattern in December when people are making their Christmas presents); and a remaining pattern, not captured by the previous components. 
+
+Formally, if $y_t$ is the observation at time $t$, one can write $y_t=T_t + S_t + R_t$ where $T_t$ corresponds to the trend at time $t$, $S_t$ corresponds to the seasonality at time $t$ and $R_t$ to the remaining pattern. 
+
+In this assignment, you will analyze time series and try to describe their features:
+
+* You will start by building a simple model for the monthly average temperature of a single time series, and check your model particularities and the captured effects (or pattern). Remember to look at the residuals is often useful to asses whether or not the model captures the important features of the data.
+* You will then apply the same simple model to every time series in the dataset.
+
+## Wrangling and exploratory data analysis
+
+__a__ Add two column corresponding to the year and month. 
+Encode month as a factor and make sure that the factor is properly ordered 
+(i.e., January first an December last).
+Furthermore:
+
+* Filter you data to focus on the 20th and 21th centuries.
+* Remove countries without any data over this period.
+
+```{r, echo = FALSE}
+month_levels <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+## create year/month + filter data for 20/21 centuries
+temperature_data <- temperature_data %>%
+    mutate(year = year(date), 
+           month = factor(month(date, label = TRUE), 
+                          levels = month_levels,
+                          ordered = FALSE)) %>%
+    filter(year >= 1900)
+
+## remove countries without data 
+no_data <- temperature_data %>% 
+    group_by(country) %>% 
+    summarize(nodata = sum(!is.na(temperature)) == 0) %>%
+    filter(nodata == FALSE)
+temperature_data <- temperature_data %>%
+    semi_join(no_data)
+```
+
+__b__ Provide a high level description of the country and region variables. In particular, your answer must provide (and summarise) all the important information about these two variables for someone who would not have access to the data. 
+You can use either words, or tables, or figures, or a bit of each.
+
+```{r, echo = FALSE}
+country_region <- temperature_data %>% 
+    select(region, country) %>%
+    unique
+```
+
+This dataset contains `r country_region %>% select(country) %>% unique %>% count`
+countries, split into `r country_region %>% select(region) %>% unique %>% count` 
+regions:
+
+```{r, echo = FALSE}
+country_region %>%
+    group_by(region) %>%
+    summarize(`number of countries` = length(country)) %>%
+    kable(caption = "Repartition of countries per region")
+```
+
+Note that countries in the "Other" region are either islands, continents, 
+or countries spanning two continents, as can be seen in 
+the table below:
+
+```{r, echo = FALSE}
+country_region %>%
+    filter(region == "Other") %>%
+    select(country) %>%
+    head(n = 10) %>%
+    kable(caption = "First 10 countries in the `Other` region")
+```
+
+__c__ Produce a worlwide map of the temperature in March 2010, as well as another map 
+with the differences in temperatures between March 2010 and March 1900, and describe what you see.
+
+Hint: ggplot2 includes two helpful command for this part: `map_data()` to retrieve a map and `geom_map()` to draw a map on a plot.
+
+In the figure below, we show the worlwide temperatures in March 2010. 
+We see large variations per country: for instance, countries in Europa and North America are colder than countries in Africa and South America.
+
+```{r}
+temperature_data %>% 
+    filter(year == 2010,
+           month == "Mar") %>%
+    ggplot(aes(map_id = country)) +
+    geom_map(aes(fill = temperature), map = map_data("world")) +
+    expand_limits(x = c(-170, 170), y = c(-85, 85)) + 
+    scale_fill_gradientn(colours = rev(heat.colors(40))) + 
+    labs(title = "Worldwide temperature in March 2010",
+         x = "longitude",
+         y = "latitude",
+         fill = "Temperature")
+```
+
+In the figure below, we show the difference in worldwide temperatures between March 2010 and 1900.
+The temperature was generally higher in 2010, with increases of about 0 to 6 degrees.
+
+```{r}
+temperature_data %>% 
+    filter(year %in% c(1900, 2010),
+           month == "Mar") %>%
+    group_by(country) %>%
+    summarise(temp_diff = diff(range(temperature))) %>%
+    ggplot(aes(map_id = country)) +
+    geom_map(aes(fill = temp_diff), map = map_data("world")) +
+    expand_limits(x = c(-170, 170), y = c(-85, 85)) + 
+    scale_fill_gradientn(colours = rev(heat.colors(40))) + 
+    labs(title = "Difference in worlwide temperature between March 1900 and 2010",
+         x = "longitude",
+         y = "latitude",
+         fill = "Difference in temperature")
+```
+
+## A model for a single time series
+
+__d__ Plot the evolution of the monthly temperature in Swizerland. 
+Then propose a model for the average monthly temperature, display its predictions and 
+the residuals, and describe what you see.
+
+Below, we show the evolution of the monthly temperature in Swizerland:
+```{r, echo = FALSE, warning = FALSE}
+temperature_data %>% 
+    filter(country == "Switzerland") %>% 
+    ggplot(aes(date, temperature)) + 
+    geom_line() + 
+    ggtitle("Full data")
+```
+Because there is a strong seasonal effect, it is unclear whether the temperature 
+is increasing over the years. To capture this effect, we estimate a simple 
+linear model, essentially fitting the monthly average temperature:
+
+```{r, warning = FALSE}
+sw <- temperature_data %>% filter(country == "Switzerland")
+sw_mod <- lm(temperature ~ month, data = sw) 
+```
+
+Below, we show the seasonal pattern for the temperature in Swizerland:
+```{r, echo = FALSE, warning = FALSE}
+sw %>% 
+    add_predictions(sw_mod, var = "mean temperature") %>%
+    filter(year == 1900) %>%
+    ggplot(aes(month, `mean temperature`, group = 1)) + 
+    geom_point() + 
+    geom_line() + 
+    ggtitle("Monthly pattern")
+```
+It is clear that the temperature is higher in summer and lower in winter. 
+Furthermore, in the residuals below, we see a trend (i.e., the temperature is 
+slightly below 0 at the begining and slightly above 0 at the end) that is left 
+unadressed by the current model.
+
+```{r, echo = FALSE, warning = FALSE}
+sw %>% 
+    add_residuals(sw_mod, var = "residuals") %>% 
+    ggplot(aes(date, residuals)) +
+    geom_hline(yintercept = 0, colour = "white", size = 3) + 
+    geom_line() + 
+    ggtitle("Remaining pattern")
+```
+
+__e__ Improve your model by including the effect of the year of observation, 
+display its predictions, the residuals, and describe what you see. 
+
+We can improve the model above by adding a linear effect for the temperature as 
+a function of the year:
+```{r, echo = FALSE, warning = FALSE}
+sw_mod <- lm(temperature ~ year + month, data = sw) 
+```
+
+In the figure below, we see that the seasonal pattern is the same as before:
+
+```{r, echo = FALSE, warning = FALSE}
+sw %>% 
+    add_predictions(sw_mod, var = "predictions") %>%
+    filter(year == 1900) %>%
+    ggplot(aes(month, predictions, group = 1)) + 
+    geom_point() + 
+    geom_line() + 
+    ggtitle("Monthly pattern")
+```
+
+In the figure below, we see that the average temperature has increased by about 3 degrees 
+between 1900 and today:
+```{r, echo = FALSE, warning = FALSE}
+sw %>% 
+    add_predictions(sw_mod, var = "predictions") %>%
+    filter(month == "Jan") %>%
+    ggplot(aes(year, predictions)) + 
+    geom_line() + 
+    ggtitle("Linear trend")
+```
+
+In the figure below, we see that the residuals do not seem to indicate any unadressed pattern:
+```{r, echo = FALSE, warning = FALSE}
+sw %>% 
+    add_residuals(sw_mod, var = "residuals") %>% 
+    ggplot(aes(date, residuals)) +
+    geom_hline(yintercept = 0, colour = "white", size = 3) + 
+    geom_line() + 
+    ggtitle("Remaining pattern")
+```
+
+## Many models
+
+__f__ Use nested data and list-columns to fit the same model to 
+every country in the dataset, as well as to add predictions and residuals for 
+each fitted model.
+
+```{r, echo = FALSE, warning = FALSE}
+country_model <- function(df) lm(temperature ~ year + month, data = df)
+by_country <- temperature_data %>% 
+    group_by(country, region) %>% 
+    nest %>%
+    mutate(model = purrr::map(data, country_model),
+           residuals = map2(data, model, add_residuals),
+           predictions = map2(data, model, add_predictions))
+```
+
+__g__ Describe the results obtained for each continent 
+(i.e., `country %in% c("Europe", "Asia", "Africa", "South America", "Oceania", "North America")`).
+Emphasize the description of:
+
+* the trend,
+* the seasonal patterns,
+* the residuals.
+
+From the figure below, it is clear that the both the average temperature and its 
+seasonal variability are vastly different from continent to continent.
+
+```{r, echo = FALSE, warning = FALSE}
+continents <- c("Europe", "Asia", "Africa", "South America", 
+                "Oceania", "North America")
+
+by_country %>%
+    filter(country %in% continents) %>% 
+    unnest(residuals) %>%
+    ggplot(aes(date, temperature)) + 
+    geom_line() + 
+    facet_wrap(~country)
+```
+
+In the figure below, we see that the seasonal pattern is inverted for continents in the 
+southern emisphere. For Africa, the picture is a bit murky, since the continent contains 
+countries in both emispheres.
+
+```{r, echo = FALSE, warning = FALSE}
+by_country %>%
+    filter(country %in% continents) %>% 
+    unnest(predictions) %>%
+    filter(year == 1900) %>%
+    ggplot(aes(month, pred, color = country, group = country)) + 
+    geom_point() + 
+    geom_line() + 
+    ylab("mean temperature") + 
+    ggtitle("Monthly pattern")
+```
+
+In the table below, we see that the average yearly temperature increase is 
+around 1/100 degree.
+
+```{r, echo = FALSE, warning = FALSE}
+by_country %>%
+    filter(country %in% continents) %>% 
+    mutate(tidy = purrr::map(model, tidy)) %>%
+    unnest(tidy) %>%
+    filter(term %in% c("year")) %>%
+    select(c(country, estimate, std.error)) %>%
+    mutate_if(is.numeric, funs(. * 100)) %>%
+    kable(digits = 3, 
+          col.names = c("continent", "yearly increase", "standard error"),
+          caption = "Yearly temperature increase per continent (in 1/100 Celsius degree)")
+```
+
+In the figure below, we see that there still seems to be patterns unadressed in the african, north american and european models.
+However, we leave the further inspection of this issue when considering countries separately.
+
+```{r, echo = FALSE, warning = FALSE}
+by_country %>%
+    filter(country %in% continents) %>% 
+    unnest(residuals) %>%
+    ggplot(aes(date, resid)) + 
+    geom_line() + 
+    ylab("residuals") + 
+    facet_wrap(~country)
+```
+
+__h__ Describe the results obtained "per" country for each continent (you can discard countries in the "Other" category).
+Emphasize the description of the trend and seasonal patterns. Then, assess the model quality/performance by using a measure of fit quality of your choice. In particular, this assessment can be done at the continent level (i.e., by averaging r squared) and/or by country. 
+
+In the figure below, we see that the seasonal pattern vary greatly by country. 
+Additionally to the inverted patterns for countries in the northern/southern emispheres, 
+we see that the seasonality is almost flat for many countries in every continent except Europe.
+This is likely due to the fact that such countries are located close to the Equator.
+
+```{r, echo = FALSE, warning = FALSE, fig.width = 10}
+by_country %>%
+    filter(region != "Other") %>% 
+    unnest(predictions) %>%
+    filter(year == 1900) %>%
+    ggplot(aes(month, pred, group = country)) + 
+    geom_line() + 
+    ylab("mean temperature") + 
+    ggtitle("Monthly pattern") +
+    facet_wrap(~region)
+```
+
+```{r, echo = FALSE, warning = FALSE}
+yearly_coef <- by_country %>%
+    filter(region != "Other") %>% 
+    mutate(yearly_coef = map_dbl(model, function(x) coef(x)[2])) %>%
+    select(yearly_coef)
+```
+In the histogram below, we see that all countries saw an average temperature increase over the past century (in degree per year).
+The average yearly increase is `r round(yearly_coef %>% pull(yearly_coef) %>% mean, 3)`, 
+its standard deviation is `r round(yearly_coef %>% pull(yearly_coef) %>% sd, 3)`, 
+its maximum is `r round(yearly_coef %>% pull(yearly_coef) %>% max, 3)`, 
+and its minimum is `r round(yearly_coef %>% pull(yearly_coef) %>% min, 3)`.
+
+```{r, echo = FALSE, warning = FALSE}
+yearly_coef %>%
+    ggplot(aes(x = yearly_coef)) + 
+    geom_histogram() + 
+    geom_vline(aes(xintercept = mean(yearly_coef)), color="red", linetype="dashed", size=1) +
+    xlab("yearly increase (degree per year)") + 
+    ggtitle(paste("Yearly temperature increase by country"))
+```
+
+Because inspecting many residuals time-series is hard, we focus on a quantitative 
+measure of fit quality: the r squared.
+
+```{r, echo = FALSE, warning = FALSE}
+r_squared <- by_country %>%
+    filter(region != "Other") %>%
+    mutate(glance = purrr::map(model, glance)) %>% 
+    unnest(glance, .drop = TRUE) %>%
+    select(country, region, r.squared)
+
+r_squared %>%
+    group_by(region) %>%
+    summarize(`mean r squared` = mean(r.squared), 
+              `sandard dev of r squared` = sd(r.squared)) %>%
+    kable(caption = "Statistics of the r squared by region",
+          digits = 3)
+```
+
+From the table above, we see that the models are generally of better quality 
+in Europe and Asia. 
+Furthermore, since the standard deviation is much lower in Europe, it also 
+indicated that models for european countries are more homogenous in term of quality.
+
+```{r, echo = FALSE, warning = FALSE}
+r_squared %>%
+    arrange(r.squared) %>%
+    head(n = 10) %>%
+    select(country, region, `r squared` = r.squared) %>% 
+    kable(caption = "The 10 worst models by r squared",
+          digits = 3)
+```
+
+Since even the lowest R squared are fairly high, we can conclude that even the 
+"worst" models are pretty good at explaining the evolution of the temperature. 
