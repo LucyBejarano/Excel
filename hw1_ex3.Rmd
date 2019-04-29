@@ -1,0 +1,124 @@
+#### Exercise 3: House Prices
+
+In this exercise, you will work with the [house prices dataset obtained from Kaggle](https://www.kaggle.com/c/house-prices-advanced-regression-techniques/data).
+The dataset contains 81 columns describing (almost) every aspect of residential homes in Ames, Iowa.
+
+
+```{r}
+knitr::opts_chunk$set(fig.width=10, fig.height=6,
+  echo =TRUE,#Show codes
+  cache = FALSE,
+  messages = FALSE,#whether to preserve messages. if FALSE, all messages will be printed in the console instead of the output document. For example error and descriptions
+  results = 'hide',
+  global.par = TRUE, fig.align = 'center', out.width='0.7\\linewidth') #Wide of plot and center
+```
+
+
+
+```{r}
+library("readr")
+library("dplyr")
+library("ggplot2")
+```
+
+
+__3.a__ Save the [data file](https://raw.githubusercontent.com/tvatter/dsfba_2019/homework/data/house_prices.csv) in `data` folder of your project. Load the dataset into the global environment by using function `read_csv` and assign it to variable `house_prices`. Make sure that the class of `house_prices` is a tibble.
+
+```{r, message = FALSE}
+house_prices<-read_csv("data/house_prices.csv")
+class(house_prices)
+```
+
+__3.b__ You will work with only four variables, namely, `LotArea`, `KitchenQual`, `LotShape`, and `SalePrice`, which indicate area (in square feet), kitchen quality, general shape, and sale price (in dollars) of property. 
+Modify `house_prices` to have only these four columns, as well as transform `LotArea` from square feet into square meters. Bonus: try to use only one `dplyr` function.
+
+```{r, message = FALSE}
+house_prices<-house_prices%>%
+  transmute(LotArea_m=(LotArea/10.76391), KitchenQual, LotShape, SalePrice)
+```
+#transmute() adds new variables and drops existing ones. 
+
+__3.c__ For how many lots the sale price was greater than its mean value?
+```{r, message = FALSE}
+house_prices%>%
+  filter(SalePrice>mean(SalePrice))%>%
+  summarise(n_lots_high_price=n())
+```
+The sale price of 560 lots were greater than its mean value.
+
+__3.d__ Display the average sale price for each kitchen quality level.
+
+  Note, levels of `KitchenQual` correspond to the followin values:
+
+    - Ex -- Excellent,
+    - Gd -- Good,
+    - TA -- Typical/Average,
+    - Fa -- Fair
+    - Po -- Poor
+
+```{r, message = FALSE}
+house_prices%>%
+  group_by(KitchenQual)%>%
+  summarise(Average_sale_price= mean(SalePrice))
+```
+
+__3.e__ Display ten randomly selected observations from the dataset. What happens if you execute your code a few times? How can you make sure that each execution returns the exact 10 rows?
+```{r, message = FALSE}
+
+house_prices%>%
+  sample_n(size=10)
+```
+If the code is executed a few times can be noticed that the rows selected change.
+```{r}
+set.seed(32)
+house_prices%>%
+  sample_n(size=10)
+```
+To be able to reproduce the same results it is possible to set a seed. The number of seed specify a vector of random numbers that is going to be used. 
+
+__3.f__ Print out the minimum price of observations for which shape is regular (i.e., `"Reg"`), and the kitchen has excellent quality.
+
+```{r, message = FALSE}
+house_prices%>%
+  filter(LotShape=="Reg" & KitchenQual=="Ex")%>%
+  summarise(Min_price=min(SalePrice))
+```
+
+__3.g__ Produce boxplots with kitchen quality as the x-axis and the price as the y-axis. Regroup kitchen quality in the following order: excellent, good, typical/average, and fair. What can you say about the relationship between kitchen quality and the price?
+
+
+```{r, message = FALSE}
+house_prices%>%
+  ggplot(mapping=aes(x=KitchenQual, y=SalePrice))+
+  ggtitle("Relationship betweeen kitchen quality and price")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  geom_boxplot()
+```
+```{r}
+house_prices%>%
+  ggplot(mapping=aes(x=KitchenQual, y=SalePrice)) +
+  geom_boxplot(mapping=aes(x=factor(KitchenQual, level= c("Ex", "Gd", "TA", "Fa"))))+
+  ggtitle("Relationship betweeen kitchen quality and price")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+The price of a residential home in Ames, Iowa decreases whith the level quality of the kitchen.
+
+__3.h__ Draw a scatter chart to investigate the dependence between `LotArea` and `SalePrice`. Further, use different colors depending on the kitchen quality, and different shapes depending on the shape of the property. 
+
+```{r, message = FALSE}
+house_prices%>%
+  ggplot(mapping = aes(x=LotArea_m, y=SalePrice))+
+  ggtitle("Relationship betweeen sales price and lot area")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  geom_point()
+```
+```{r}
+house_prices%>%
+  ggplot(mapping = aes(x=LotArea_m, y=SalePrice, color=KitchenQual, shape=LotShape))+
+  ggtitle("Relationship betweeen sales price and lot area")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  geom_point()+
+  scale_shape_manual(values=c(0, 3, 16,17))+
+  scale_color_manual(values=c("red", "green", "orange","bisque3"))
+```
+
