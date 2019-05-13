@@ -1,0 +1,71 @@
+library(readr)
+library(readxl)
+#install.packages("labelled")#labels to columns
+library(labelled)#labels to columns
+#library(dplyr)no yet
+
+
+####Loading data
+#setwd("~/GitHub/Excel/Data Science auxiliar/Data/IPEDS")
+setwd("C:/Users/Lucy Bejarano/Desktop/UNIL/Subjets/1-2019/Data Science/data")
+
+#CVS files
+ldf <- list() # creates a list
+listcsv <- dir(pattern = "*.csv") # creates the list of all the csv files in the directory
+for (k in 1:length(listcsv)){
+  ldf[[k]] <- read.csv(listcsv[k])
+}
+
+list(
+admissions_and_test_scores<-ldf[[1]], 
+completitions<-ldf[[2]],
+fall_enrollment<-ldf[[4]],
+gratuation_rates<- ldf[[5]],
+outcome_measures<- ldf[[9]])
+
+#datalist<-c("admissions_and_test_scores","completitions","fall_enrollment","gratuation_rates","outcome_measures")
+
+#Excel files
+ldf_dic<- list() # creates a list
+listxlsx <- dir(pattern = "*.xlsx") # creates the list of all the csv files in the directory
+for (k in 1:length(listxlsx)){
+  ldf_dic[[k]] <- read_excel(listxlsx[k], sheet = "varlist")
+}
+
+admissions_and_test_scores_dic<-ldf_dic[[1]] 
+completitions_dic<-ldf_dic[[2]]
+fall_enrollment_dic<-ldf_dic[[4]]
+gratuation_rates_dic<- ldf_dic[[5]]
+outcome_measures_dic<- ldf_dic[[9]]
+
+#Loop for drop not working
+#ldf_clean <- list() # creates a list
+#for (q in 1:length(datalist)){
+#datalist[q] <- datalist[q][,-grep(pattern="^X",colnames(datalist[q]))] 
+#}
+
+
+####Cleaning and data formatting
+
+#Drop columns with type of data indicator
+admissions_and_test_scores <- admissions_and_test_scores[,-grep(pattern="^X",colnames(admissions_and_test_scores))] 
+completitions <- completitions[,-grep(pattern="^X",colnames(completitions))]
+fall_enrollment <- fall_enrollment[,-grep(pattern="^X",colnames(fall_enrollment))]
+gratuation_rates <- gratuation_rates[,-grep(pattern="^X",colnames(gratuation_rates))]
+outcome_measures <- outcome_measures[,-grep(pattern="^X",colnames(outcome_measures))]
+
+#label columns
+var_label(admissions_and_test_scores)<-admissions_and_test_scores_dic$varTitle
+var_label(completitions)<-completitions_dic$varTitle
+var_label(fall_enrollment)<-fall_enrollment_dic$varTitle
+var_label(gratuation_rates)<-gratuation_rates_dic$varTitle
+var_label(outcome_measures)<-outcome_measures_dic$varTitle
+
+#labels loops not working
+
+#datalist2<-c("admissions_and_test_scores_dic","completitions_dic","fall_enrollment_dic","gratuation_rates_dic","outcome_measures_dic")
+# ldf_dic_d<- list() # creates a list
+# for (k in 1:length(datalist2)){
+# var_label(datalist[[k]])<-datalist2[[k]][[7]]
+# }
+
